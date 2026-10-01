@@ -28,6 +28,6 @@ Esto es completamente normal y necesario. Como configuraste bien el archivo .git
 
 Una vez que el editor abra, es casi seguro que verán la pantalla azul vacía (el mismo susto que te pasó a ti antes).
 
-Solo tienen que ir a la ventana Project (abajo), entrar a Assets > Scenes y hacer doble clic en el archivo de tu escena (el que se llamaba 0).
+Solo tienen que ir a la ventana Project (abajo), entrar a Assets > Scenes y hacer doble clic en el archivo de tu escena (el que se llamaba Prototipo Juego).
 
 Al hacer eso, aparecerá inmediatamente el Canvas, el panel de diálogos, los botones y toda la conexión con el código que tú dejaste armada.
