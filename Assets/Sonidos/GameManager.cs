@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using TMPro; // Librería necesaria para usar TextMeshPro
 
@@ -19,6 +20,13 @@ public class GameManager : MonoBehaviour
     [Header("Paneles")]
     public GameObject panelPreguntas; // Contiene la pregunta y los 4 botones
     public GameObject panelCartas;    // Contiene las cartas de la fase final
+    public GameObject panelGameOver;  // Se muestra cuando se acaban las vidas (hijo del Canvas del juego)
+
+    [Header("Vidas")]
+    public int vidasMaximas = 3;
+    public GameObject[] iconosVidas;  // Los 3 iconos del HUD; se apagan uno a uno al fallar
+    public Button botonReintentar;    // Botón del panel Game Over
+    private int vidasActuales;
 
     [Header("Elementos de la Interfaz - Preguntas")]
     public TextMeshProUGUI textoPreguntaUI;
@@ -58,10 +66,13 @@ public class GameManager : MonoBehaviour
     public AudioClip sonidoVoltearCarta;
     public AudioClip sonidoCartaGanadora;
     public AudioClip sonidoCartaPerdedora;
+    public AudioClip sonidoGameOver;
 
     [Header("Colores de Feedback (preguntas)")]
     public Color colorCorrecto = Color.green;
     public Color colorIncorrecto = Color.red;
+    public int parpadeos = 3;               // Cuántas veces parpadea el botón
+    public float duracionParpadeo = 0.15f;  // Segundos por cada cambio de color
     private Color colorOriginal;
 
     void Start()
@@ -71,11 +82,21 @@ public class GameManager : MonoBehaviour
             colorOriginal = botonesOpciones[0].image.color;
         }
 
+        vidasActuales = vidasMaximas;
+        ActualizarVidasHUD();
+
         PrepararPreguntas();
 
-        // El panel de preguntas empieza OCULTO - se activa cuando termina el diálogo
+        // Todo empieza OCULTO - se activa cuando termina el diálogo
         if (panelCartas != null) panelCartas.SetActive(false);
         if (panelPreguntas != null) panelPreguntas.SetActive(false);
+        if (panelGameOver != null) panelGameOver.SetActive(false);
+
+        if (botonReintentar != null)
+        {
+            botonReintentar.onClick.RemoveAllListeners();
+            botonReintentar.onClick.AddListener(Reintentar);
+        }
     }
 
     // Llamado por el DialogueManager cuando el diálogo inicial termina
@@ -103,6 +124,31 @@ public class GameManager : MonoBehaviour
     }
 
     // ---------------------------------------------------
+    //  VIDAS
+    // ---------------------------------------------------
+
+    void ActualizarVidasHUD()
+    {
+        for (int i = 0; i < iconosVidas.Length; i++)
+        {
+            if (iconosVidas[i] != null) iconosVidas[i].SetActive(i < vidasActuales);
+        }
+    }
+
+    void IniciarGameOver()
+    {
+        ReproducirSonido(sonidoGameOver);
+        if (panelPreguntas != null) panelPreguntas.SetActive(false);
+        if (panelGameOver != null) panelGameOver.SetActive(true);
+    }
+
+    // Recarga la escena. OJO: la escena debe estar en Build Settings.
+    public void Reintentar()
+    {
+        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+    }
+
+    // ---------------------------------------------------
     //  FASE 1: PREGUNTAS
     // ---------------------------------------------------
 
@@ -110,7 +156,6 @@ public class GameManager : MonoBehaviour
     {
         esperandoSiguiente = false;
 
-        // Ya no depende de "vidas" - solo se acaba cuando no quedan preguntas
         if (preguntaActual < preguntasSeleccionadas.Count)
         {
             RestaurarBotones();
@@ -129,23 +174,18 @@ public class GameManager : MonoBehaviour
         }
         else
         {
-            // Se acabaron las preguntas -> pasamos a la fase de cartas
+            // Sobrevivió a todas las preguntas -> pasamos a la fase de cartas
             IniciarFaseCartas();
         }
     }
 
     public void EvaluarRespuesta(int opcionSeleccionada)
     {
-        if (esperandoSiguiente) return;
+        if (esperandoSiguiente) return; // bloquea clics mientras parpadea el feedback
         esperandoSiguiente = true;
 
         int indiceCorrecta = preguntasSeleccionadas[preguntaActual].indiceCorrecta;
         bool esCorrecta = opcionSeleccionada == indiceCorrecta;
-
-        foreach (Button btn in botonesOpciones)
-        {
-            btn.interactable = false;
-        }
 
         respuestasCorrectas.Add(esCorrecta);
 
@@ -153,22 +193,40 @@ public class GameManager : MonoBehaviour
         {
             aciertos++;
             ReproducirSonido(sonidoCorrecto);
-            botonesOpciones[opcionSeleccionada].image.color = colorCorrecto;
+            StartCoroutine(ParpadearYSiguiente(botonesOpciones[opcionSeleccionada], colorCorrecto, null));
         }
         else
         {
             fallos++;
+            vidasActuales--;
+            ActualizarVidasHUD();
             ReproducirSonido(sonidoIncorrecto);
-            botonesOpciones[opcionSeleccionada].image.color = colorIncorrecto;
-            botonesOpciones[indiceCorrecta].image.color = colorCorrecto;
-        }
 
-        StartCoroutine(EsperarYSiguiente());
+            // Muestra también cuál era la correcta
+            botonesOpciones[indiceCorrecta].image.color = colorCorrecto;
+            StartCoroutine(ParpadearYSiguiente(botonesOpciones[opcionSeleccionada], colorIncorrecto, null));
+        }
     }
 
-    IEnumerator EsperarYSiguiente()
+    // El botón elegido parpadea entre su color original y el de feedback, y luego sigue el juego.
+    IEnumerator ParpadearYSiguiente(Button boton, Color colorFeedback, System.Action alFinal)
     {
-        yield return new WaitForSeconds(1f);
+        for (int i = 0; i < parpadeos; i++)
+        {
+            boton.image.color = colorFeedback;
+            yield return new WaitForSeconds(duracionParpadeo);
+            boton.image.color = colorOriginal;
+            yield return new WaitForSeconds(duracionParpadeo);
+        }
+        boton.image.color = colorFeedback; // se queda con el color final un momento
+        yield return new WaitForSeconds(0.5f);
+
+        if (vidasActuales <= 0)
+        {
+            IniciarGameOver();
+            yield break;
+        }
+
         preguntaActual++;
         MostrarPregunta();
     }
@@ -177,7 +235,6 @@ public class GameManager : MonoBehaviour
     {
         foreach (Button btn in botonesOpciones)
         {
-            btn.interactable = true;
             btn.image.color = colorOriginal;
         }
     }

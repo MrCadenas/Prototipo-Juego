@@ -3,6 +3,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.InputSystem; // Necesario para leer clics con el nuevo Input System
 using TMPro;
+using System;
 
 // Cada línea de diálogo: quién habla, qué dice, y su retrato
 [System.Serializable]
@@ -135,5 +136,10 @@ public class DialogueManager : MonoBehaviour
 
         // Ejecuta lo que corresponda: iniciar preguntas (guion inicial) o nada (guion final)
         callbackAlTerminar?.Invoke();
+    }
+
+    internal void IniciarDialogoInicial()
+    {
+        throw new NotImplementedException();
     }
 }
